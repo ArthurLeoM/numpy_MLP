@@ -13,13 +13,13 @@ import pickle
 from myMLP import *
 from plot import *
 
-def train(epochs, batch_size, optim, param_init, lr_scheduler):
+def train(epochs, batch_size, optim, param_init, lr_scheduler, reg):
     train_dataset = datasets.MNIST(root='./data/', train=True, download=True, transform=transforms.ToTensor())
     train_loader = Data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     dev_dataset = datasets.MNIST(root='./data/', train=False, download=True, transform=transforms.ToTensor())
     dev_loader = Data.DataLoader(dataset=dev_dataset, batch_size=batch_size, shuffle=False)
 
-    net = Net(batch_size=batch_size, input_dim=784, optim=optim, param_init=param_init, lr_scheduler=lr_scheduler)
+    net = Net(batch_size=batch_size, input_dim=784, optim=optim, param_init=param_init, lr_scheduler=lr_scheduler, reg=reg)
     net.addLinear(784, 512, "ReLU")
     net.addLinear(512, 128, "ReLU")
     net.addLinear(128, 10, "None")
@@ -42,19 +42,26 @@ def train(epochs, batch_size, optim, param_init, lr_scheduler):
         print("---------Training--------")
         for step, (train_x, train_y) in enumerate(train_loader):
             train_x = np.squeeze(train_x.numpy()).reshape(-1, 784)
+            batch_size = train_x.shape[0]
             y_pred = net.forward(train_x)
-            loss = CEloss(torch.tensor(y_pred), train_y)
+            loss = CEloss(torch.tensor(y_pred), train_y).numpy()
+            if net.reg == 'l2':
+                for layer in net.layers:
+                    loss += 0.1 * np.sum(np.square(layer.w)) / (2 * batch_size)
+            elif net.reg == 'l1':
+                for layer in net.layers:
+                    loss += 0.01 * np.sum(np.abs(layer.w)) / batch_size
             train_y = train_y.numpy()
             y_true = np.eye(10)[train_y]
-            net.backward(y_true, epoch+1)
+            net.backward(y_true, epoch)
             
             pred_idx = np.argmax(y_pred, axis=1)
             train_y_pred.extend(pred_idx.tolist())
             train_y_true.extend(train_y.tolist())
-            train_batch_loss.append(loss.numpy())
+            train_batch_loss.append(loss)
 
             if step % 10 == 0:
-                print("Epoch %d Batch %d: Loss %.4f" % (epoch, step, loss.numpy()))
+                print("Epoch %d Batch %d: Loss %.4f" % (epoch, step, loss))
         
         train_epoch_loss.append(np.mean(np.array(train_batch_loss)))
         train_loss.extend(train_batch_loss)
@@ -94,8 +101,8 @@ def train(epochs, batch_size, optim, param_init, lr_scheduler):
         'dev_acc': dev_acc 
     }
     
-    res_fn = './res/BGD_norm_const_baseline.pkl'
-    fig_fn = './fig/BGD_norm_const_baseline.png'
+    res_fn = './res/BGD_norm_const_l1.pkl'
+    fig_fn = './fig/BGD_norm_const_l1.png'
     f = open(res_fn, 'wb')
     pickle.dump(save_res, f)
     f.close()
@@ -108,7 +115,8 @@ if __name__ == '__main__':
         batch_size=256,
         optim="BGD",
         param_init="norm",
-        lr_scheduler="const"
+        lr_scheduler="const",
+        reg="l1"
     )
 
 
