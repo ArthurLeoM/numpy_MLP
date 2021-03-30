@@ -13,16 +13,43 @@ import pickle
 from myMLP import *
 from plot import *
 
-def train(epochs, batch_size, optim, param_init, lr_scheduler, reg):
-    train_dataset = datasets.MNIST(root='./data/', train=True, download=True, transform=transforms.ToTensor())
+
+def get_argparse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", default=50, type=int)
+    parser.add_argument("--batch_size", default=256, type=int)
+    parser.add_argument("--optim", default="BGD", type=str, help="SGD(Stochastic GD)/BGD(Mini Batch GD)")
+    parser.add_argument("--param_init", default="norm", type=str, help="norm/kaiming")
+    parser.add_argument("--lr_scheduler", default="const", type=str, help="const/multistep/exp")
+    parser.add_argument("--more_layers", action='store_true', default=False)
+    parser.add_argument("--less_layers", action='store_true', default=False)
+    parser.add_argument("--reg", default="None", type=str, help="None/l1/l2")
+    return parser
+
+
+def train(epochs, batch_size, optim, param_init, lr_scheduler, reg, more_layers, less_layers):
+    train_dataset = datasets.MNIST(root='../data/', train=True, download=True, transform=transforms.ToTensor())
     train_loader = Data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    dev_dataset = datasets.MNIST(root='./data/', train=False, download=True, transform=transforms.ToTensor())
+    dev_dataset = datasets.MNIST(root='../data/', train=False, download=True, transform=transforms.ToTensor())
     dev_loader = Data.DataLoader(dataset=dev_dataset, batch_size=batch_size, shuffle=False)
 
     net = Net(batch_size=batch_size, input_dim=784, optim=optim, param_init=param_init, lr_scheduler=lr_scheduler, reg=reg)
-    net.addLinear(784, 512, "ReLU")
-    net.addLinear(512, 128, "ReLU")
-    net.addLinear(128, 10, "None")
+    if not less_layers and not more_layers:
+        net.addLinear(784, 512, "ReLU")
+        net.addLinear(512, 128, "ReLU")
+        net.addLinear(128, 10, "None")
+    elif less_layers and not more_layers:
+        net.addLinear(784, 128, "ReLU")
+        net.addLinear(128, 10, "None")
+    elif not less_layers and more_layers:
+        net.addLinear(784, 512, "ReLU")
+        net.addLinear(512, 128, "ReLU")
+        net.addLinear(128, 64, "ReLU")
+        net.addLinear(64, 10, "None")
+    else:
+        print("Error: Label less_layers and more_layers cannot be tagged True at the same time!")
+        return
+
     net.addSoftmax()
 
     CEloss = nn.CrossEntropyLoss()
@@ -101,8 +128,13 @@ def train(epochs, batch_size, optim, param_init, lr_scheduler, reg):
         'dev_acc': dev_acc 
     }
     
-    res_fn = './res/BGD_norm_const_l1.pkl'
-    fig_fn = './fig/BGD_norm_const_l1.png'
+    fn = args.optim + '_' + args.param_init + "_" + args.lr_scheduler + "_" +args.reg
+    if less_layers:
+        fn += '_lesslayers'
+    elif more_layers:
+        fn += '_morelayers'
+    res_fn = fn + '.pkl'
+    fig_fn = fn + '.png'
     f = open(res_fn, 'wb')
     pickle.dump(save_res, f)
     f.close()
@@ -110,13 +142,18 @@ def train(epochs, batch_size, optim, param_init, lr_scheduler, reg):
 
 
 if __name__ == '__main__':
+    parser = get_argparse()
+    args = parser.parse_args()
+
     train(
-        epochs=50,
-        batch_size=256,
-        optim="BGD",
-        param_init="norm",
-        lr_scheduler="const",
-        reg="l1"
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        optim=args.optim,
+        param_init=args.param_init,
+        lr_scheduler=args.lr_scheduler,
+        reg=args.reg,
+        more_layers=args.more_layers,
+        less_layers=args.less_layers
     )
 
 
